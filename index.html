@@ -886,5 +886,67 @@ document.getElementById("btnLogoutMenu").addEventListener("click", ()=>{
 })();
 </script>
 
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"></script>
+
+<script>
+  // Substitua pelos dados reais do seu projeto Firebase
+  const firebaseConfig = {
+    apiKey: "SUA_APIKEY_AQUI",
+    authDomain: "SEU_PROJETO.firebaseapp.com",
+    projectId: "SEU_PROJETO",
+    appId: "SUA_APPID_AQUI"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+
+  // LOGIN
+  function login(email, senha) {
+    auth.signInWithEmailAndPassword(email, senha)
+      .then((userCredential) => {
+        alert("Login realizado com sucesso!");
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("dashboard").style.display = "block";
+      })
+      .catch((error) => {
+        alert("Erro no login: " + error.message);
+      });
+  }
+
+  // REGISTRO
+  function register(email, senha) {
+    auth.createUserWithEmailAndPassword(email, senha)
+      .then((userCredential) => {
+        alert("Usuário criado com sucesso!");
+      })
+      .catch((error) => {
+        alert("Erro ao criar usuário: " + error.message);
+      });
+  }
+
+  // LOGOUT
+  function logout() {
+    auth.signOut().then(() => {
+      alert("Saiu com sucesso!");
+      document.getElementById("loginScreen").style.display = "block";
+      document.getElementById("dashboard").style.display = "none";
+    });
+  }
+
+  // ESCUTAR LOGIN AUTOMÁTICO
+  auth.onAuthStateChanged((user) => {
+    if (user) {
+      document.getElementById("loginScreen").style.display = "none";
+      document.getElementById("dashboard").style.display = "block";
+    } else {
+      document.getElementById("loginScreen").style.display = "block";
+      document.getElementById("dashboard").style.display = "none";
+    }
+  });
+</script>
+
 </body>
 </html>
+
