@@ -887,66 +887,72 @@ document.getElementById("btnLogoutMenu").addEventListener("click", ()=>{
 </script>
 
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+  import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-<script>
-  // Substitua pelos dados reais do seu projeto Firebase
+  // Configuração completa do Firebase fornecida por você
   const firebaseConfig = {
-    apiKey: "SUA_APIKEY_AQUI",
-    authDomain: "SEU_PROJETO.firebaseapp.com",
-    projectId: "SEU_PROJETO",
-    appId: "SUA_APPID_AQUI"
+    apiKey: "AIzaSyCMbAMEGZL8GPEopviie-vD8IbqWa9TjWw",
+    authDomain: "login-9b3c9.firebaseapp.com",
+    projectId: "login-9b3c9",
+    storageBucket: "login-9b3c9.firebasestorage.app",
+    messagingSenderId: "399079930543",
+    appId: "1:399079930543:web:d00a2e6f2212154b08725a",
+    measurementId: "G-W1ZXF6KZCG"
   };
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
 
-  // LOGIN
-  function login(email, senha) {
-    auth.signInWithEmailAndPassword(email, senha)
-      .then((userCredential) => {
-        alert("Login realizado com sucesso!");
-        document.getElementById("loginScreen").style.display = "none";
-        document.getElementById("dashboard").style.display = "block";
-      })
-      .catch((error) => {
-        alert("Erro no login: " + error.message);
+  // Inicializar Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const db = getFirestore(app);
+
+  // Firestore collection usada para persistir 'usuarios'
+  const usuariosCol = collection(db, 'usuarios');
+
+  async function carregarUsuariosFirestore(){
+    try{
+      const snapshot = await getDocs(usuariosCol);
+      const arr = [];
+      snapshot.forEach(d=>{
+        const data = d.data();
+        arr.push({ usuario: data.usuario, senha: data.senha, tipo: data.tipo, setor: data.setor });
       });
+      if(arr.length > 0) {
+        usuarios = arr;
+      }
+      renderUsuarios();
+    }catch(e){ console.error('Erro ao carregar usuarios do Firestore:', e); }
   }
 
-  // REGISTRO
-  function register(email, senha) {
-    auth.createUserWithEmailAndPassword(email, senha)
-      .then((userCredential) => {
-        alert("Usuário criado com sucesso!");
-      })
-      .catch((error) => {
-        alert("Erro ao criar usuário: " + error.message);
-      });
+  async function salvarUsuariosFirestore(){
+    try{
+      const old = await getDocs(usuariosCol);
+      const deletes = [];
+      old.forEach(d=> deletes.push(deleteDoc(doc(db, 'usuarios', d.id))));
+      await Promise.all(deletes);
+      const adds = usuarios.map(u => setDoc(doc(db, 'usuarios', u.usuario), { usuario: u.usuario, senha: u.senha, tipo: u.tipo, setor: u.setor || null }));
+      await Promise.all(adds);
+    }catch(e){ console.error('Erro ao salvar usuarios no Firestore:', e); }
   }
 
-  // LOGOUT
-  function logout() {
-    auth.signOut().then(() => {
-      alert("Saiu com sucesso!");
-      document.getElementById("loginScreen").style.display = "block";
-      document.getElementById("dashboard").style.display = "none";
+  window.carregarUsuarios = carregarUsuariosFirestore;
+  window.salvarUsuarios = salvarUsuariosFirestore;
+
+  carregarUsuariosFirestore();
+
+  try{
+    onSnapshot(query(usuariosCol), (snapshot)=>{
+      const arr = [];
+      snapshot.forEach(d=> arr.push(d.data()));
+      if(arr.length) {
+        usuarios = arr.map(x=>({usuario:x.usuario, senha:x.senha, tipo:x.tipo, setor:x.setor}));
+        renderUsuarios();
+      }
     });
-  }
-
-  // ESCUTAR LOGIN AUTOMÁTICO
-  auth.onAuthStateChanged((user) => {
-    if (user) {
-      document.getElementById("loginScreen").style.display = "none";
-      document.getElementById("dashboard").style.display = "block";
-    } else {
-      document.getElementById("loginScreen").style.display = "block";
-      document.getElementById("dashboard").style.display = "none";
-    }
-  });
+  }catch(e){ console.log('onSnapshot não disponível:', e); }
 </script>
-
 </body>
 </html>
 
