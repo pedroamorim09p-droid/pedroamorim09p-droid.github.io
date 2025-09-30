@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Polo Empresarial — Dashboard (Supabase Auth)</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<style>
+body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:#041426;color:#e8f4fb}
+#loginOverlay{position:fixed;left:0;top:0;right:0;bottom:0;background:linear-gradient(180deg, rgba(2,6,10,0.95), rgba(2,6,10,0.98));display:flex;align-items:center;justify-content:center;z-index:9999}
+#loginCard{width:360px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:22px;border:1px solid rgba(255,255,255,0.03)}
+#loginCard h3{color:#d4af37;margin-bottom:12px}
+.mini{color:#98a2b3;font-size:13px}
+.container-main{display:flex;gap:18px;padding:18px}
+aside.sidebar{width:260px;background:rgba(255,255,255,0.02);border-radius:12px;padding:14px;border:1px solid rgba(255,255,255,0.03)}
+.card-panel{background:rgba(255,255,255,0.01);padding:14px;border-radius:12px;margin-bottom:14px;border:1px solid rgba(255,255,255,0.03)}
+.btn-outline-light{color:#e8f4fb;border-color:rgba(255,255,255,0.2)}
+</style>
+</head>
+<body>
+
+<!-- LOGIN OVERLAY -->
+<div id="loginOverlay">
+  <div id="loginCard">
+    <h3>Entrar — Polo Empresarial</h3>
+    <div class="mb-2">
+      <input id="loginUser" class="form-control form-control-sm" placeholder="Email ou usuário">
+    </div>
+    <div class="mb-2">
+      <input id="loginPass" type="password" class="form-control form-control-sm" placeholder="Senha">
+    </div>
+    <div class="d-flex gap-2">
+      <button id="btnLogin" class="btn btn-outline-light btn-sm flex-grow-1">Entrar</button>
+      <button id="btnLogout" class="btn btn-outline-light btn-sm d-none">Sair</button>
+    </div>
+    <div class="mt-2 mini" id="loginMsg"></div>
+    <div class="mt-3 mini">Apenas admins podem criar novos usuários — use o painel <b>Gerenciar Usuários</b>.</div>
+  </div>
+</div>
+
+<header style="height:64px;display:flex;align-items:center;gap:12px;padding:12px 18px">
+  <div style="font-weight:700;font-size:18px">Polo Empresarial</div>
+  <div class="ms-auto" id="userBadge" style="margin-right:18px"></div>
+</header>
+
+<div class="container-main">
+  <aside class="sidebar">
+    <div class="card-panel" id="resumoAtual">
+      <div class="mini">Resumo Atual</div>
+      <div style="font-size:22px;font-weight:700" id="totalFatur">R$ 100.000</div>
+      <div class="mini">Mês: <b id="mesAtual">2025-08</b></div>
+      <div class="mt-2">
+        <button id="btnUsuariosMenu" class="btn btn-outline-light btn-sm w-100 d-none" data-bs-toggle="modal" data-bs-target="#modalUsuarios">Gerenciar Usuários</button>
+      </div>
+    </div>
+  </aside>
+
+  <main style="flex:1;display:flex;flex-direction:column;gap:12px" id="mainBoard">
+    <div class="card-panel">Bem-vindo ao dashboard.</div>
+  </main>
+</div>
+
+<!-- Modal Gerenciar Usuários -->
+<div class="modal fade" id="modalUsuarios" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content" style="background:#041426;color:#fff;border:1px solid rgba(212,175,55,0.6)">
+      <div class="modal-header">
+        <h5 class="modal-title">Gerenciar Usuários (admin)</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Criar usuário (admin)</label>
+          <input id="newEmail" class="form-control form-control-sm mb-2" placeholder="email@exemplo.com">
+          <input id="newUsuario" class="form-control form-control-sm mb-2" placeholder="username exibido">
+          <div class="d-flex gap-2 mb-2">
+            <input id="newSenha" class="form-control form-control-sm" placeholder="senha (temporária)">
+            <select id="newTipo" class="form-select form-select-sm" style="width:160px">
+              <option value="setor">setor</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <input id="newSetor" class="form-control form-control-sm mb-2" placeholder="setor (opcional)">
+          <button id="btnAddUsuario" class="btn btn-outline-light btn-sm">Criar usuário</button>
+          <div class="mini mt-2" id="createMsg"></div>
+        </div>
+        <hr style="border-color:rgba(255,255,255,0.05)">
+        <div>
+          <h6>Lista de usuários</h6>
+          <div id="usersList" class="mt-2"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Supabase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.37.0/dist/supabase.min.js"></script>
+
+<script>
+/*
+  ATENÇÃO: Este arquivo usa a anon key do Supabase no cliente para permitir a criação
+  de usuários pelo admin diretamente no painel (fluxo simples para testes).
+  Em produção, é muito mais seguro usar uma Edge Function / backend que chame
+  admin.createUser com a service_role key.
+*/
+
+// INSIRA AQUI SEU SUPABASE URL E ANON KEY
+const SUPABASE_URL = "";
+const SUPABASE_ANON_KEY = "";
+
+// Inicializa supabase se configurado
+let supabase = null;
+let useSupabase = false;
+if(SUPABASE_URL && SUPABASE_ANON_KEY){
+  supabase = supabaseLib.createClient ? supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  useSupabase = true;
+  console.log("Supabase inicializado (Auth).");
+} else {
+  console.warn("Supabase não configurado. Preencha SUPABASE_URL e SUPABASE_ANON_KEY no arquivo.");
+}
+
+// Estado local
+let usuarioLogado = null; // { id, email, usuario, tipo, setor }
+const loginOverlay = document.getElementById('loginOverlay');
+const loginMsg = document.getElementById('loginMsg');
+const userBadge = document.getElementById('userBadge');
+
+// Helpers Supabase (profiles table)
+async function fetchProfiles(){
+  if(!useSupabase) return [];
+  const { data, error } = await supabase.from('profiles').select('*').order('usuario', { ascending: true });
+  if(error){ console.error("Erro ao buscar profiles:", error); return []; }
+  return data || [];
+}
+
+async function insertProfile(profile){
+  if(!useSupabase) return null;
+  const { data, error } = await supabase.from('profiles').insert([profile]).select().single();
+  if(error){ console.error("Erro ao inserir profile:", error); return null; }
+  return data;
+}
+
+async function deleteProfileById(id){
+  if(!useSupabase) return null;
+  const { data, error } = await supabase.from('profiles').delete().eq('id', id).select();
+  if(error){ console.error("Erro ao deletar profile:", error); return null; }
+  return data;
+}
+
+// Render lista de usuários no modal (admin)
+async function renderUsuarios(){
+  const container = document.getElementById('usersList');
+  container.innerHTML = 'Carregando...';
+  const profiles = await fetchProfiles();
+  if(!profiles || profiles.length===0){ container.innerHTML = '<div class="mini">Nenhum usuário encontrado.</div>'; return; }
+  container.innerHTML = '';
+  profiles.forEach((p, idx)=>{
+    const el = document.createElement('div');
+    el.className = 'd-flex align-items-center justify-content-between p-2 mb-1';
+    el.style.border = '1px solid rgba(255,255,255,0.03)';
+    el.innerHTML = `<div><b>${p.usuario}</b> <span class="mini">(${p.tipo})</span><div class="mini">${p.setor||''}</div></div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-light btn-sm" onclick="copyCred('${p.usuario}','${p.id}')">Copiar</button>
+        <button class="btn btn-outline-light btn-sm" onclick="removerUsuario('${p.id}','${p.usuario}')">Remover profile</button>
+      </div>`;
+    container.appendChild(el);
+  });
+}
+
+// Copiar credenciais: somente copia nome de usuário (senha não é conhecida)
+window.copyCred = function(username, id){
+  navigator.clipboard?.writeText(`usuario: ${username}`).then(()=> alert('Copiado: ' + username)).catch(()=> alert('usuario: ' + username));
+}
+
+// Remover profile (atenção: isso **não** remove o auth.user — para isso precisa de backend com service_role key)
+window.removerUsuario = async function(id, username){
+  if(!confirm(`Remover profile de ${username}? (isso NÃO remove a conta de Auth — use backend para remover a conta completamente)`)) return;
+  await deleteProfileById(id);
+  await renderUsuarios();
+  alert('Profile removido. Nota: a conta de autenticação (auth.users) permanece até você removê-la via painel Supabase ou função backend.');
+}
+
+// Criação de usuário (admin-only) — usa signUp no cliente + grava profile
+document.getElementById('btnAddUsuario').addEventListener('click', async ()=>{
+  const email = document.getElementById('newEmail').value.trim();
+  const usuario = document.getElementById('newUsuario').value.trim();
+  const senha = document.getElementById('newSenha').value.trim();
+  const tipo = document.getElementById('newTipo').value;
+  const setor = document.getElementById('newSetor').value.trim() || null;
+  const msg = document.getElementById('createMsg');
+  msg.textContent = '';
+  if(!useSupabase){ msg.textContent = 'Supabase não configurado.'; return; }
+  if(!email || !usuario || !senha){ msg.textContent = 'Preencha email, usuario e senha.'; return; }
+  msg.textContent = 'Criando...';
+  try{
+    // 1) cria usuário no Auth (cliente) — NOTA: expõe anon key no frontend
+    const { data: signData, error: signErr } = await supabase.auth.signUp({ email, password: senha });
+    if(signErr){ console.error(signErr); msg.textContent = 'Erro ao criar auth: ' + signErr.message; return; }
+    const user = signData.user || signData.data?.user;
+    if(!user || !user.id){ msg.textContent = 'Usuário criado mas sem id retornado. Verifique painel Supabase.'; return; }
+    // 2) cria profile ligado ao user.id
+    const profile = { id: user.id, usuario, tipo, setor };
+    const created = await insertProfile(profile);
+    if(!created){ msg.textContent = 'Erro ao criar profile.'; return; }
+    msg.textContent = 'Usuário criado com sucesso.';
+    document.getElementById('newEmail').value=''; document.getElementById('newUsuario').value=''; document.getElementById('newSenha').value='';
+    await renderUsuarios();
+  }catch(e){
+    console.error(e); msg.textContent = 'Erro ao criar usuário.';
+  }
+});
+
+// Login: aceita email ou usuário. Se for usuário tenta mapear para email via profiles table.
+document.getElementById('btnLogin').addEventListener('click', realizarLogin);
+async function realizarLogin(){
+  const input = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value.trim();
+  loginMsg.textContent = '';
+  if(!useSupabase){ loginMsg.textContent = 'Supabase não configurado.'; return; }
+  if(!input || !pass){ loginMsg.textContent = 'Preencha usuario/email e senha.'; return; }
+
+  let email = input;
+  if(!input.includes('@')){
+    // busca profile por usuario para recuperar email
+    const { data: profiles, error: pErr } = await supabase.from('profiles').select('id, usuario').eq('usuario', input).limit(1);
+    if(pErr){ console.error(pErr); loginMsg.textContent = 'Erro ao buscar usuario.'; return; }
+    if(!profiles || profiles.length===0){ loginMsg.textContent = 'Usuário não encontrado.'; return; }
+    // temos profile, mas não conhecemos email — precisamos buscar auth.users? não possível via select em auth schema client-side.
+    // alternativa: tentamos buscar por email igual ao usuario (com sufix) — mas geralmente admin criará com email.
+    // Melhor pedir para usar email se usuário não for encontrado por perfil corretamente.
+    // We'll try to fetch via profiles => but profiles doesn't store email for privacy; admin should create with known email.
+    // For robustness, we'll attempt to use signInWithPassword by using special RPC to get email — but that's not available.
+    // So we require admin to provide email at creation and users should login by email.
+    loginMsg.textContent = 'Use seu EMAIL para login (ou peça ao admin configurar).' ;
+    return;
+  }
+
+  // efetua login via email
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+  if(error){ console.error(error); loginMsg.textContent = 'Erro no login: '+(error.message||error.code); return; }
+  // obtem usuário e profile
+  const uid = data.user?.id;
+  if(!uid){ loginMsg.textContent = 'Login efetuado, mas sem user id recebido.'; return; }
+  const { data: profile, error: profErr } = await supabase.from('profiles').select('*').eq('id', uid).limit(1).maybeSingle();
+  if(profErr){ console.error(profErr); }
+  usuarioLogado = { id: uid, email: email, usuario: profile?.usuario || null, tipo: profile?.tipo || null, setor: profile?.setor || null };
+  loginOverlay.style.display = 'none';
+  updateUIAfterLogin();
+}
+
+// Atualiza UI após login: mostra botões admin se for admin
+function updateUIAfterLogin(){
+  userBadge.innerHTML = usuarioLogado ? `<div class="mini">Olá, <b>${usuarioLogado.usuario||usuarioLogado.email}</b> <small>(${usuarioLogado.tipo||'—'})</small></div>` : '';
+  if(usuarioLogado && usuarioLogado.tipo === 'admin'){
+    document.getElementById('btnUsuariosMenu').classList.remove('d-none');
+    // carregar lista ao abrir modal
+    document.getElementById('modalUsuarios').addEventListener('shown.bs.modal', ()=> renderUsuarios());
+  } else {
+    document.getElementById('btnUsuariosMenu').classList.add('d-none');
+  }
+}
+
+// Logout
+document.getElementById('btnLogout').addEventListener('click', async ()=>{
+  if(!useSupabase) return;
+  await supabase.auth.signOut();
+  usuarioLogado = null;
+  loginOverlay.style.display = 'flex';
+  userBadge.innerHTML = '';
+  document.getElementById('loginUser').value=''; document.getElementById('loginPass').value='';
+});
+
+// Inicialização: tenta recuperar sessão ativa
+(async function startup(){
+  if(!useSupabase) return;
+  const { data: sessionData, error } = await supabase.auth.getSession();
+  if(sessionData?.session?.user){
+    const uid = sessionData.session.user.id;
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', uid).limit(1).maybeSingle();
+    usuarioLogado = { id: uid, email: sessionData.session.user.email, usuario: profile?.usuario || null, tipo: profile?.tipo || null, setor: profile?.setor || null };
+    loginOverlay.style.display = 'none';
+    updateUIAfterLogin();
+  } else {
+    // show overlay (login required)
+    loginOverlay.style.display = 'flex';
+  }
+})();
+</script>
+
+</body>
+</html>
